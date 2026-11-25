@@ -112,6 +112,15 @@ export async function authenticateStudentWithExamToken(params: {
   });
 
   if (authErr || !authData.user) {
+    if (authErr?.status === 429 || authErr?.code === "over_request_rate_limit") {
+      return {
+        ok: false,
+        statusCode: 429,
+        error:
+          "Antrean autentikasi sedang padat karena banyak peserta masuk bersamaan. Mohon tunggu 5–10 detik lalu klik Masuk lagi.",
+      };
+    }
+
     const nextRate = await recordRateLimitFailure(userRateKey, 5, 15, 15);
     await recordAuditLog({
       schoolId: profile.school_id,

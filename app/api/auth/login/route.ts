@@ -92,6 +92,16 @@ export async function POST(request: NextRequest) {
   });
 
   if (authError || !authData.user) {
+    if (authError?.status === 429 || authError?.code === "over_request_rate_limit") {
+      return NextResponse.json(
+        {
+          error:
+            "Layanan autentikasi sedang padat. Mohon tunggu beberapa detik lalu coba lagi.",
+        },
+        { status: 429 }
+      );
+    }
+
     await recordRateLimitFailure(rateKey, 5, 15, 15);
     await recordAuditLog({
       schoolId: profile.school_id,

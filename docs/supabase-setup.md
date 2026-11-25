@@ -6,7 +6,7 @@
 3. Catat **Project URL**, **Anon Key**, dan **Service Role Key** (rahasia server-only).
 
 ## 2. Menjalankan Migrasi Database
-Anda dapat menjalankan migrasi menggunakan Supabase CLI atau SQL Editor secara berurutan (`0001` hingga `0008`):
+Anda dapat menjalankan migrasi menggunakan Supabase CLI atau SQL Editor secara berurutan (`0001` hingga `0010`):
 
 ```bash
 npx supabase login
