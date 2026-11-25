@@ -86,4 +86,24 @@ describe("Supabase Migration Schema & RLS Completeness", () => {
     expect(stmtPolicyMatch?.[0]).not.toContain("'student'");
     expect(stmtPolicyMatch?.[0]).not.toContain("'supervisor'");
   });
+
+  it("hardens RLS helpers in private schema without granting student or supervisor answer key access", () => {
+    const hardeningSql = fs.readFileSync(
+      path.join(migrationsDir, "0010_rls_private_helpers_and_initplan.sql"),
+      "utf8"
+    );
+    const optAlterMatch = hardeningSql.match(
+      /ALTER POLICY question_options_staff_only[\s\S]*?;/i
+    );
+    const stmtAlterMatch = hardeningSql.match(
+      /ALTER POLICY question_statements_staff_only[\s\S]*?;/i
+    );
+    expect(optAlterMatch?.[0]).toBeTruthy();
+    expect(optAlterMatch?.[0]).not.toContain("'student'");
+    expect(optAlterMatch?.[0]).not.toContain("'supervisor'");
+    expect(stmtAlterMatch?.[0]).toBeTruthy();
+    expect(stmtAlterMatch?.[0]).not.toContain("'student'");
+    expect(stmtAlterMatch?.[0]).not.toContain("'supervisor'");
+    expect(hardeningSql).toContain("REVOKE ALL ON FUNCTION public.is_super_admin() FROM PUBLIC, anon, authenticated;");
+  });
 });
