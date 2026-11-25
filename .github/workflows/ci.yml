@@ -1,0 +1,43 @@
+name: CBT Smart Exam CI
+
+on:
+  push:
+    branches: [main, staging, development]
+  pull_request:
+    branches: [main, staging, development]
+
+jobs:
+  quality-and-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run Unit & Security Tests
+        run: npm test
+
+      - name: Build Next.js Application
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-service-role-key
+          TOKEN_HASH_PEPPER: ci-placeholder-pepper-0123456789abcdef0123456789abcdef
+          SESSION_SIGNING_SECRET: ci-placeholder-session-secret-0123456789abcdef
+        run: npm run build
