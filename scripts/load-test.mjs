@@ -17,8 +17,9 @@ const args = Object.fromEntries(
 );
 
 const VIRTUAL_USERS = Number(args.users || 50);
-const TARGET_URL = args.target || process.env.LOAD_TEST_TARGET_URL || "http://localhost:3000";
+const TARGET_URL = (args.target || process.env.LOAD_TEST_TARGET_URL || "http://localhost:3000").replace(/\/$/, "");
 const MODE = args.mode || "health"; // "health" or "full-exam"
+const VERCEL_BYPASS = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
 
 function percentile(sorted, p) {
   if (sorted.length === 0) return 0;
@@ -26,16 +27,43 @@ function percentile(sorted, p) {
   return sorted[Math.max(0, Math.min(sorted.length - 1, idx))];
 }
 
+function mergeCookies(jar, setCookieHeaders) {
+  for (const raw of setCookieHeaders) {
+    const pair = raw.split(";")[0];
+    const eqIdx = pair.indexOf("=");
+    if (eqIdx > 0) {
+      jar.set(pair.slice(0, eqIdx).trim(), pair.slice(eqIdx + 1).trim());
+    }
+  }
+}
+
+function cookieHeader(jar) {
+  return Array.from(jar.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
+}
+
 async function simulateStudent(vuIndex) {
   const latencies = [];
   let errors = 0;
   let requests = 0;
+  const jar = new Map();
 
-  async function timedFetch(url, options) {
+  async function timedFetch(url, options = {}) {
     const start = performance.now();
     requests++;
+    const headers = { ...(options.headers || {}) };
+    if (jar.size > 0) headers["Cookie"] = cookieHeader(jar);
+    if (VERCEL_BYPASS) headers["x-vercel-protection-bypass"] = VERCEL_BYPASS;
+
     try {
-      const res = await fetch(url, options);
+      const res = await fetch(url, { ...options, headers });
+      const setCookies =
+        typeof res.headers.getSetCookie === "function"
+          ? res.headers.getSetCookie()
+          : [];
+      if (setCookies.length > 0) mergeCookies(jar, setCookies);
+
       const elapsed = performance.now() - start;
       latencies.push(elapsed);
       if (!res.ok) errors++;
@@ -69,28 +97,52 @@ async function simulateStudent(vuIndex) {
     body: JSON.stringify({ username, password, token }),
   });
 
-  if (!loginRes.ok) {
+  if (!loginRes.ok || !loginRes.data.examId || !loginRes.data.sessionId) {
     return { latencies, errors, requests };
   }
 
-  // Simulate 5 autosaves and 1 heartbeat
-  const attemptId = loginRes.data.attemptId;
-  if (attemptId) {
-    for (let q = 1; q <= 5; q++) {
-      await timedFetch(`${TARGET_URL}/api/attempts/${attemptId}/answers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionId: crypto.randomUUID(),
-          isFlagged: false,
-          isAnswered: true,
-          answerVersion: q,
-          idempotencyKey: `lt-${vuIndex}-${q}-${Date.now()}`,
-        }),
-      });
-    }
-    await timedFetch(`${TARGET_URL}/api/attempts/${attemptId}`, { method: "POST" });
+  const startRes = await timedFetch(`${TARGET_URL}/api/attempts/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      examId: loginRes.data.examId,
+      sessionId: loginRes.data.sessionId,
+      tokenId: loginRes.data.tokenId ?? null,
+    }),
+  });
+
+  const attemptId = startRes.data?.attempt?.id;
+  if (!startRes.ok || !attemptId) {
+    return { latencies, errors, requests };
   }
+
+  const examPayload = await timedFetch(`${TARGET_URL}/api/attempts/${attemptId}`, {
+    method: "GET",
+  });
+  const questions = Array.isArray(examPayload.data?.questions)
+    ? examPayload.data.questions
+    : [];
+
+  for (let i = 0; i < Math.min(5, questions.length); i++) {
+    const q = questions[i];
+    const firstOptId = Array.isArray(q.options) && q.options[0] ? q.options[0].id : null;
+    await timedFetch(`${TARGET_URL}/api/attempts/${attemptId}/answers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        questionId: q.id,
+        selectedOptionId: q.questionType === "single_choice" ? firstOptId : null,
+        selectedOptionIds: q.questionType === "mcma" && firstOptId ? [firstOptId] : [],
+        essayAnswer: q.questionType === "essay" ? "Jawaban uji beban staging." : null,
+        isFlagged: false,
+        isAnswered: true,
+        answerVersion: 1,
+        idempotencyKey: `lt-${vuIndex}-${i}-${crypto.randomUUID()}`,
+      }),
+    });
+  }
+
+  await timedFetch(`${TARGET_URL}/api/attempts/${attemptId}`, { method: "POST" });
 
   return { latencies, errors, requests };
 }
