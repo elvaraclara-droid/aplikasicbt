@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { APP_AUTHOR_CREDIT, cn } from "@/lib/utils";
 
 function LoginFormContent() {
   const router = useRouter();
@@ -245,6 +245,10 @@ function LoginFormContent() {
           )}
         </CardContent>
       </Card>
+
+      <footer className="mt-6 text-center text-xs font-medium text-slate-500">
+        {APP_AUTHOR_CREDIT}
+      </footer>
     </div>
   );
 }

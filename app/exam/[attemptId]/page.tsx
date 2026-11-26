@@ -38,7 +38,7 @@ import {
   getOfflineAnswersForAttempt,
   removeOfflineAnswer,
 } from "@/lib/offline/answer-queue";
-import { cn, formatSecondsClock } from "@/lib/utils";
+import { APP_AUTHOR_CREDIT, cn, formatSecondsClock } from "@/lib/utils";
 import type {
   AntiCheatConfig,
   AttemptStatus,
@@ -943,6 +943,10 @@ export default function StudentExamPage() {
           </aside>
         </div>
       </main>
+
+      <footer className="relative z-10 border-t border-slate-200 bg-white/90 px-4 py-2.5 text-center text-[11px] font-medium text-slate-500">
+        {APP_AUTHOR_CREDIT}
+      </footer>
 
       {/* Submit Confirmation Modal */}
       <Dialog open={submitModalOpen} onOpenChange={setSubmitModalOpen}>

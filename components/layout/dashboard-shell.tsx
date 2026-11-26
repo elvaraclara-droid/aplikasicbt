@@ -13,7 +13,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn, formatDateTimeID } from "@/lib/utils";
+import { APP_AUTHOR_CREDIT, cn, formatDateTimeID } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
@@ -283,6 +283,10 @@ export function DashboardShell({
         )}
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+
+        <footer className="border-t border-slate-200 bg-white px-4 py-3 text-center text-xs font-medium text-slate-500 sm:px-6 lg:px-8">
+          {APP_AUTHOR_CREDIT}
+        </footer>
       </div>
 
       {/* Password Dialog */}

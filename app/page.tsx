@@ -5,6 +5,7 @@ import { getAuthenticatedContext, getRoleHomePath } from "@/lib/auth/session";
 import { isSupabaseAdminConfigured, isSupabasePublicConfigured } from "@/lib/env";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { APP_AUTHOR_CREDIT } from "@/lib/utils";
 
 export default async function HomePage() {
   const ctx = await getAuthenticatedContext();
@@ -15,8 +16,8 @@ export default async function HomePage() {
   const supabaseReady = isSupabasePublicConfigured() && isSupabaseAdminConfigured();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900 text-white">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900 text-white">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-lg">
             <ShieldCheck className="h-6 w-6 text-white" />
@@ -37,7 +38,7 @@ export default async function HomePage() {
         </Link>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-14">
+      <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-14">
         <div className="mx-auto max-w-3xl text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-1.5 text-xs font-medium text-blue-200">
             {supabaseReady ? (
@@ -115,6 +116,10 @@ export default async function HomePage() {
           </Card>
         </div>
       </main>
+
+      <footer className="border-t border-slate-800/80 px-6 py-5 text-center text-xs font-medium text-slate-300">
+        {APP_AUTHOR_CREDIT}
+      </footer>
     </div>
   );
 }

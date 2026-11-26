@@ -1,6 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+export const APP_AUTHOR_CREDIT =
+  "Aplikasi ini dibuat oleh Murdani dari Kepulauan Selayar";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
