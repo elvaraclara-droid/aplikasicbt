@@ -5,7 +5,7 @@
    - Buat paket bank soal per mata pelajaran yang ditugaskan.
    - Buat soal bertipe **Pilihan Ganda Tunggal**, **MCMA** (pilih mode *Partial Credit* atau *Exact Match*), **Benar/Salah Multi-Pernyataan**, atau **Uraian**.
    - Sisipkan rumus matematika dengan `$...$` atau lampirkan gambar/audio/video/PDF ke soal.
-   - Gunakan fitur Duplikat, Import JSON, dan Export JSON bila diperlukan.
+   - Gunakan fitur **Download Template .docx** dan **Import .docx** (format tabel terstruktur Word mendukung PG, MCMA, Benar/Salah, Uraian, rumus KaTeX `$...$`, dan gambar), serta Duplikat, Import JSON, dan Export JSON.
 3. **Pembuatan & Pengaturan Ujian (`/teacher/exams`):**
    - Tentukan judul, jadwal, durasi, jumlah sesi (single atau multi-sesi), pilih soal, dan tandai sebagai ujian susulan jika diperlukan.
    - Daftarkan kelas ke sesi ujian dan tugaskan Pengawas.

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Copy, Download, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Copy, Download, FileText, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, SelectNative, Textarea } from "@/components/ui/input";
@@ -24,6 +24,13 @@ export default function TeacherQuestionsPage() {
   // New Bank form
   const [newBankTitle, setNewBankTitle] = useState("");
   const [newBankSubjectId, setNewBankSubjectId] = useState("");
+  const [docxImporting, setDocxImporting] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<{
+    importedCount: number;
+    skippedCount: number;
+    errors: string[];
+    warnings: string[];
+  } | null>(null);
 
   // Question Editor state
   const [bankId, setBankId] = useState("");
@@ -184,7 +191,12 @@ export default function TeacherQuestionsPage() {
 
   async function handleJsonImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file || !bankId || !subjectId) return;
+    if (!file) return;
+    if (!bankId || !subjectId) {
+      toast.error("Pilih atau buat paket Bank Soal terlebih dahulu sebelum import.");
+      e.target.value = "";
+      return;
+    }
     try {
       const text = await file.text();
       const parsed = JSON.parse(text);
@@ -211,6 +223,52 @@ export default function TeacherQuestionsPage() {
     }
   }
 
+  async function handleDocxImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!bankId || !subjectId) {
+      toast.error("Pilih atau buat paket Bank Soal terlebih dahulu sebelum import .docx.");
+      e.target.value = "";
+      return;
+    }
+    setDocxImporting(true);
+    setImportFeedback(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("bank_id", bankId);
+      fd.append("subject_id", subjectId);
+      const res = await fetch("/api/questions/import-export", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportFeedback({
+          importedCount: 0,
+          skippedCount: data.errors?.length || 1,
+          errors: data.errors || [data.error || "Import .docx gagal"],
+          warnings: data.warnings || [],
+        });
+        toast.error(data.error || "Import .docx gagal");
+        return;
+      }
+      setImportFeedback({
+        importedCount: data.importedCount || 0,
+        skippedCount: data.skippedCount || 0,
+        errors: data.errors || [],
+        warnings: data.warnings || [],
+      });
+      toast.success(`${data.importedCount} soal dari .docx berhasil diimpor ke bank soal.`);
+      loadData();
+    } catch {
+      toast.error("Gagal membaca atau mengunggah file .docx.");
+    } finally {
+      setDocxImporting(false);
+      e.target.value = "";
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-slate-500">
@@ -227,10 +285,33 @@ export default function TeacherQuestionsPage() {
           <h1 className="text-2xl font-bold text-slate-900">Bank Soal Terpusat</h1>
           <p className="text-sm text-slate-500">
             Mendukung Pilihan Ganda Tunggal, MCMA, Benar/Salah Multi-Pernyataan, Uraian,
-            rumus KaTeX ($...$), dan lampiran media.
+            rumus KaTeX ($...$), import Word (.docx), dan lampiran media.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <a
+              href="/api/questions/import-export?format=docx-template"
+              download="template-bank-soal-cbt.docx"
+            >
+              <FileText className="h-4 w-4" /> Download Template .docx
+            </a>
+          </Button>
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800">
+            {docxImporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            {docxImporting ? "Mengimpor .docx..." : "Import .docx"}
+            <input
+              type="file"
+              accept=".docx"
+              className="hidden"
+              onChange={handleDocxImport}
+              disabled={docxImporting}
+            />
+          </label>
           <a href={`/api/questions/import-export${filterBankId ? `?bankId=${filterBankId}` : ""}`}>
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4" /> Export JSON
@@ -242,6 +323,47 @@ export default function TeacherQuestionsPage() {
           </label>
         </div>
       </div>
+
+      {importFeedback && (
+        <div
+          className={`rounded-xl border p-4 text-xs sm:text-sm ${
+            importFeedback.errors.length > 0 && importFeedback.importedCount === 0
+              ? "border-rose-200 bg-rose-50 text-rose-900"
+              : "border-blue-200 bg-blue-50 text-blue-950"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2 font-semibold">
+            <span>
+              Hasil Import .docx: {importFeedback.importedCount} soal masuk
+              {importFeedback.skippedCount > 0
+                ? `, ${importFeedback.skippedCount} soal dilewati`
+                : ""}
+              .
+            </span>
+            <button
+              type="button"
+              className="text-xs underline cursor-pointer"
+              onClick={() => setImportFeedback(null)}
+            >
+              Tutup
+            </button>
+          </div>
+          {importFeedback.errors.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-rose-800">
+              {importFeedback.errors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          )}
+          {importFeedback.warnings.length > 0 && (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-800">
+              {importFeedback.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Create Bank */}
       <Card>
