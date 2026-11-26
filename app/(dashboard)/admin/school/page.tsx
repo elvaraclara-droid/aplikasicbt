@@ -2,11 +2,19 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Save } from "lucide-react";
+import { Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { DeletableAcademicEntity } from "@/lib/academic/deletion-guard";
 import type { ClassRef, SubjectRef } from "@/types/views";
 
 interface SchoolProfileState {
@@ -58,6 +66,17 @@ export default function SchoolDataManagementPage() {
   const [subjCode, setSubjCode] = useState("");
   const [subjName, setSubjName] = useState("");
 
+  interface DeleteTarget {
+    entity: DeletableAcademicEntity;
+    id: string;
+    label: string;
+    entityTitle: string;
+    detail?: string;
+  }
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/academic");
@@ -91,6 +110,39 @@ export default function SchoolDataManagementPage() {
     toast.success("Data berhasil disimpan.");
     onOk?.();
     loadData();
+  }
+
+  function openDeleteConfirm(target: DeleteTarget) {
+    setDeleteError(null);
+    setDeleteTarget(target);
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/admin/academic", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entity: deleteTarget.entity,
+          id: deleteTarget.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg = data.error || "Gagal menghapus data";
+        setDeleteError(msg);
+        toast.error(msg);
+        return;
+      }
+      toast.success(`${deleteTarget.entityTitle} "${deleteTarget.label}" berhasil dihapus.`);
+      setDeleteTarget(null);
+      loadData();
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (loading) {
@@ -298,12 +350,41 @@ export default function SchoolDataManagementPage() {
                     >
                       +Sem 1
                     </Button>
+                    <DeleteAcademicIconButton
+                      ariaLabel={`Hapus tahun pelajaran ${ay.name}`}
+                      onClick={() =>
+                        openDeleteConfirm({
+                          entity: "academic_year",
+                          id: ay.id,
+                          label: ay.name,
+                          entityTitle: "Tahun Pelajaran",
+                          detail:
+                            "Semester di bawah tahun pelajaran ini yang belum digunakan pada ujian akan ikut dihapus.",
+                        })
+                      }
+                    />
                   </div>
                 </div>
               ))}
               {semesters.map((sm) => (
-                <div key={sm.id} className="rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600">
-                  {sm.name} ({sm.is_active ? "Aktif" : "Arsip"})
+                <div
+                  key={sm.id}
+                  className="flex items-center justify-between rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600"
+                >
+                  <span>
+                    {sm.name} ({sm.is_active ? "Aktif" : "Arsip"})
+                  </span>
+                  <DeleteAcademicIconButton
+                    ariaLabel={`Hapus semester ${sm.name}`}
+                    onClick={() =>
+                      openDeleteConfirm({
+                        entity: "semester",
+                        id: sm.id,
+                        label: sm.name,
+                        entityTitle: "Semester",
+                      })
+                    }
+                  />
                 </div>
               ))}
             </div>
@@ -352,12 +433,27 @@ export default function SchoolDataManagementPage() {
               {classes.map((c) => (
                 <div
                   key={c.id}
-                  className="flex items-center justify-between rounded-md border border-slate-200 p-2"
+                  className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2"
                 >
                   <span className="font-medium">
                     {c.name} ({c.code})
                   </span>
-                  <Badge variant="default">Tingkat {c.grade_level}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="default">Tingkat {c.grade_level}</Badge>
+                    {c.id && (
+                      <DeleteAcademicIconButton
+                        ariaLabel={`Hapus kelas ${c.name}`}
+                        onClick={() =>
+                          openDeleteConfirm({
+                            entity: "class",
+                            id: c.id!,
+                            label: `${c.name}${c.code ? ` (${c.code})` : ""}`,
+                            entityTitle: "Kelas",
+                          })
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -397,16 +493,106 @@ export default function SchoolDataManagementPage() {
               {subjects.map((sub) => (
                 <div
                   key={sub.id}
-                  className="flex items-center justify-between rounded-md border border-slate-200 p-2"
+                  className="flex items-center justify-between gap-2 rounded-md border border-slate-200 p-2"
                 >
                   <span className="font-medium">{sub.name}</span>
-                  <Badge variant="primary">{sub.code}</Badge>
+                  <div className="flex items-center gap-1">
+                    <Badge variant="primary">{sub.code}</Badge>
+                    {sub.id && (
+                      <DeleteAcademicIconButton
+                        ariaLabel={`Hapus mata pelajaran ${sub.name}`}
+                        onClick={() =>
+                          openDeleteConfirm({
+                            entity: "subject",
+                            id: sub.id!,
+                            label: `${sub.name}${sub.code ? ` (${sub.code})` : ""}`,
+                            entityTitle: "Mata Pelajaran",
+                          })
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !deleting) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Hapus {deleteTarget?.entityTitle}</DialogTitle>
+            <DialogDescription>
+              Anda akan menghapus <strong>{deleteTarget?.label}</strong>. Data yang masih digunakan
+              oleh siswa, penugasan guru, bank soal, atau jadwal ujian akan otomatis ditolak agar
+              data ujian tidak rusak.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget?.detail && (
+            <p className="mb-3 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+              {deleteTarget.detail}
+            </p>
+          )}
+          {deleteError && (
+            <div className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-800">
+              {deleteError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleting}
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleting}
+              onClick={handleConfirmDelete}
+            >
+              {deleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Ya, Hapus
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function DeleteAcademicIconButton({
+  ariaLabel,
+  onClick,
+}: {
+  ariaLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      className="h-7 w-7 shrink-0 p-0 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      onClick={onClick}
+    >
+      <Trash2 className="h-3.5 w-3.5" />
+    </Button>
   );
 }

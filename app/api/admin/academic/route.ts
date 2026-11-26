@@ -3,6 +3,10 @@ import { z } from "zod";
 import { requireRoleApi } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/security/audit";
+import {
+  deleteAcademicEntity,
+  type AcademicQueryClient,
+} from "@/lib/academic/deletion-guard";
 
 export async function GET(request: NextRequest) {
   const auth = await requireRoleApi(["school_admin", "teacher", "supervisor", "super_admin"]);
@@ -191,4 +195,83 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ error: "Entitas tidak didukung" }, { status: 400 });
+}
+
+const deleteAcademicSchema = z.object({
+  entity: z.enum(["academic_year", "semester", "class", "subject"]),
+  id: z.string().uuid("ID entitas tidak valid"),
+});
+
+/**
+ * Deletes an academic year, semester, class, or subject for the authenticated school after dependency checks.
+ */
+export async function DELETE(request: NextRequest) {
+  const auth = await requireRoleApi(["school_admin", "super_admin"]);
+  if (!auth.ok) return auth.response;
+
+  const schoolId = auth.ctx.profile.school_id;
+  if (!schoolId) {
+    return NextResponse.json(
+      { error: "Admin harus terikat ke sekolah" },
+      { status: 400 }
+    );
+  }
+
+  const jsonBody = await request.json().catch(() => null);
+  const rawInput =
+    jsonBody && typeof jsonBody === "object"
+      ? jsonBody
+      : {
+          entity: request.nextUrl.searchParams.get("entity"),
+          id: request.nextUrl.searchParams.get("id"),
+        };
+
+  const parsed = deleteAcademicSchema.safeParse(rawInput);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Parameter penghapusan tidak valid" },
+      { status: 400 }
+    );
+  }
+
+  const admin = createSupabaseAdminClient();
+  const result = await deleteAcademicEntity(
+    admin as unknown as AcademicQueryClient,
+    {
+      schoolId,
+      entity: parsed.data.entity,
+      id: parsed.data.id,
+    }
+  );
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error, usages: result.usages },
+      { status: result.status }
+    );
+  }
+
+  await recordAuditLog({
+    schoolId,
+    actorId: auth.ctx.userId,
+    actorRole: auth.ctx.profile.role,
+    action: result.auditAction,
+    entityType: result.entityType,
+    entityId: result.deletedId,
+    metadata: {
+      code: result.deletedCode,
+      name: result.deletedLabel,
+      deletedSemestersCount: result.deletedSemestersCount,
+    },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    deleted: {
+      entity: result.entity,
+      id: result.deletedId,
+      name: result.deletedLabel,
+      code: result.deletedCode,
+    },
+  });
 }
