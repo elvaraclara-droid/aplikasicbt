@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireRoleApi } from "@/lib/auth/session";
+import { requireFastStudentExamSession } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const singleAnswerSchema = z.object({
@@ -23,11 +23,19 @@ const batchOrSingleSchema = z.union([
   }),
 ]);
 
+interface BatchSavedRow {
+  question_id: string;
+  answer_id: string;
+  persisted_version: number;
+  conflict_detected: boolean;
+  saved_at: string;
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ attemptId: string }> }
 ) {
-  const auth = await requireRoleApi(["student"]);
+  const auth = await requireFastStudentExamSession(request);
   if (!auth.ok) return auth.response;
 
   const { attemptId } = await context.params;
@@ -73,9 +81,9 @@ export async function POST(
     );
   }
 
-  // Enforce server deadline with tiny 15s reconnect grace for in-flight offline flush
+  // Enforce server deadline with 25s reconnect grace for pre-deadline/in-flight batch flushes
   const now = new Date();
-  if (attempt.deadline_at && now.getTime() > new Date(attempt.deadline_at).getTime() + 15000) {
+  if (attempt.deadline_at && now.getTime() > new Date(attempt.deadline_at).getTime() + 25000) {
     return NextResponse.json(
       { error: "Batas waktu ujian telah berakhir di server." },
       { status: 409 }
@@ -83,52 +91,63 @@ export async function POST(
   }
 
   const items = "items" in parsed.data ? parsed.data.items : [parsed.data];
-  const results = [];
+  const versionMap = new Map(items.map((item) => [item.questionId, item.answerVersion]));
 
-  for (const item of items) {
-    const { data, error } = await admin.rpc("save_student_answer_atomic", {
-      p_school_id: attempt.school_id,
-      p_exam_id: attempt.exam_id,
-      p_session_id: attempt.session_id,
-      p_student_id: attempt.student_id,
-      p_attempt_id: attempt.id,
-      p_question_id: item.questionId,
-      p_selected_option_id: item.selectedOptionId ?? null,
-      p_selected_option_ids: item.selectedOptionIds ?? [],
-      p_statement_answers: item.statementAnswers ?? {},
-      p_essay_answer: item.essayAnswer ?? null,
-      p_is_flagged: item.isFlagged,
-      p_is_answered: item.isAnswered,
-      p_answer_version: item.answerVersion,
-      p_idempotency_key: item.idempotencyKey,
-      p_client_updated_at: item.clientUpdatedAt || now.toISOString(),
-      p_actor_id: auth.ctx.userId,
-    });
+  const rpcItems = items.map((item) => ({
+    question_id: item.questionId,
+    selected_option_id: item.selectedOptionId ?? null,
+    selected_option_ids: item.selectedOptionIds ?? [],
+    statement_answers: item.statementAnswers ?? {},
+    essay_answer: item.essayAnswer ?? null,
+    is_flagged: item.isFlagged,
+    is_answered: item.isAnswered,
+    answer_version: item.answerVersion,
+    idempotency_key: item.idempotencyKey,
+    client_updated_at: item.clientUpdatedAt || now.toISOString(),
+  }));
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
+  const { data, error } = await admin.rpc("save_student_answers_batch", {
+    p_school_id: attempt.school_id,
+    p_exam_id: attempt.exam_id,
+    p_session_id: attempt.session_id,
+    p_student_id: attempt.student_id,
+    p_attempt_id: attempt.id,
+    p_items: rpcItems,
+    p_actor_id: auth.ctx.userId,
+  });
 
-    const row = Array.isArray(data) ? data[0] : data;
-    if (row?.conflict_detected) {
-      await admin.from("exam_activity_logs").insert({
-        school_id: attempt.school_id,
-        exam_id: attempt.exam_id,
-        session_id: attempt.session_id,
-        attempt_id: attempt.id,
-        student_id: attempt.student_id,
-        user_id: auth.ctx.userId,
-        activity_type: "ANSWER_VERSION_CONFLICT_RESOLVED",
-        description: `Versi jawaban klien (${item.answerVersion}) lebih lama dari server (${row.persisted_version}); versi server dipertahankan.`,
-        metadata: { question_id: item.questionId },
-      });
-    }
-    results.push({ questionId: item.questionId, ...row });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  const savedRows = (Array.isArray(data) ? data : data ? [data] : []) as BatchSavedRow[];
+  const conflictLogs = savedRows
+    .filter((row) => row.conflict_detected)
+    .map((row) => ({
+      school_id: attempt.school_id,
+      exam_id: attempt.exam_id,
+      session_id: attempt.session_id,
+      attempt_id: attempt.id,
+      student_id: attempt.student_id,
+      user_id: auth.ctx.userId,
+      activity_type: "ANSWER_VERSION_CONFLICT_RESOLVED",
+      description: `Versi jawaban klien (${versionMap.get(row.question_id) ?? "?"}) lebih lama dari server (${row.persisted_version}); versi server dipertahankan.`,
+      metadata: { question_id: row.question_id },
+    }));
+
+  if (conflictLogs.length > 0) {
+    await admin.from("exam_activity_logs").insert(conflictLogs);
   }
 
   return NextResponse.json({
     ok: true,
     serverTimestamp: now.toISOString(),
-    results,
+    results: savedRows.map((row) => ({
+      questionId: row.question_id,
+      answer_id: row.answer_id,
+      persisted_version: row.persisted_version,
+      conflict_detected: row.conflict_detected,
+      saved_at: row.saved_at,
+    })),
   });
 }

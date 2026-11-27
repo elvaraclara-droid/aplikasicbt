@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isSupabaseAdminConfigured } from "@/lib/env";
+import { attachStudentExamAuthCookie } from "@/lib/auth/session";
 import { authenticateStudentWithExamToken } from "@/services/student-auth.service";
 
 const studentLoginSchema = z.object({
@@ -56,13 +57,17 @@ export async function POST(request: NextRequest) {
       : `/student/check-in?examId=${result.data.examId}&sessionId=${result.data.sessionId}`,
   });
 
-  // Store HTTP-only active session marker for multi-session checks
+  // Store HTTP-only active session marker & signed fast exam cookie
   response.cookies.set("cbt_session_token_id", result.data.sessionTokenId, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 60 * 60 * 8,
+  });
+  attachStudentExamAuthCookie(response, {
+    userId: result.data.userId,
+    sessionTokenId: result.data.sessionTokenId,
   });
 
   return response;

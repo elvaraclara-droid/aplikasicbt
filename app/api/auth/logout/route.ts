@@ -1,7 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { getAuthenticatedContext } from "@/lib/auth/session";
+import {
+  clearStudentExamAuthCookie,
+  getAuthenticatedContext,
+} from "@/lib/auth/session";
 import { recordAuditLog } from "@/lib/security/audit";
 
 export async function POST(request: NextRequest) {
@@ -41,5 +44,6 @@ export async function POST(request: NextRequest) {
 
   const res = NextResponse.json({ ok: true });
   res.cookies.delete("cbt_session_token_id");
+  clearStudentExamAuthCookie(res);
   return res;
 }

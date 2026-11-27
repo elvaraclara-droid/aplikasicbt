@@ -149,10 +149,20 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     role: profile.role,
     mustChangePassword: profile.must_change_password,
     redirectTo: getRoleHomePath(profile.role as UserRole),
   });
+
+  response.cookies.set("cbt_session_token_id", sessionTokenId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 12,
+  });
+
+  return response;
 }

@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { requireRoleApi } from "@/lib/auth/session";
+import {
+  attachStudentExamAuthCookie,
+  requireRoleApi,
+} from "@/lib/auth/session";
+import { EXAM_AUTH_COOKIE_NAME } from "@/lib/auth/signed-token";
 import { startOrResumeExamAttempt } from "@/services/exam-attempt.service";
 
 const startSchema = z.object({
@@ -29,7 +33,14 @@ export async function POST(request: NextRequest) {
       sessionTokenId,
     });
 
-    return NextResponse.json(result);
+    const response = NextResponse.json(result);
+    if (sessionTokenId && !request.cookies.get(EXAM_AUTH_COOKIE_NAME)?.value) {
+      attachStudentExamAuthCookie(response, {
+        userId: auth.ctx.userId,
+        sessionTokenId,
+      });
+    }
+    return response;
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }

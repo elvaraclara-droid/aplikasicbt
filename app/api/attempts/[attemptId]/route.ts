@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireRoleApi } from "@/lib/auth/session";
+import {
+  attachStudentExamAuthCookie,
+  requireFastStudentExamSession,
+  requireRoleApi,
+} from "@/lib/auth/session";
+import { EXAM_AUTH_COOKIE_NAME } from "@/lib/auth/signed-token";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getSanitizedExamPayload,
@@ -7,7 +12,7 @@ import {
 } from "@/services/exam-attempt.service";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ attemptId: string }> }
 ) {
   const auth = await requireRoleApi(["student"]);
@@ -16,7 +21,15 @@ export async function GET(
   const { attemptId } = await context.params;
   try {
     const payload = await getSanitizedExamPayload(attemptId, auth.ctx.userId);
-    return NextResponse.json(payload);
+    const response = NextResponse.json(payload);
+    const sessionTokenId = request.cookies.get("cbt_session_token_id")?.value;
+    if (sessionTokenId && !request.cookies.get(EXAM_AUTH_COOKIE_NAME)?.value) {
+      attachStudentExamAuthCookie(response, {
+        userId: auth.ctx.userId,
+        sessionTokenId,
+      });
+    }
+    return response;
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 403 });
   }
@@ -26,8 +39,8 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ attemptId: string }> }
 ) {
-  // Server-authoritative heartbeat & status sync
-  const auth = await requireRoleApi(["student"]);
+  // Server-authoritative heartbeat & status sync using fast local HMAC session verification
+  const auth = await requireFastStudentExamSession(request);
   if (!auth.ok) return auth.response;
 
   const { attemptId } = await context.params;
@@ -55,10 +68,10 @@ export async function POST(
     return NextResponse.json({ error: "Attempt tidak ditemukan" }, { status: 404 });
   }
 
-  // Check if session token was revoked by newer login (multi-session detection)
+  // Fallback check if session token was revoked when running without fastAuth
   const currentCookieToken = request.cookies.get("cbt_session_token_id")?.value;
   let sessionRevoked = false;
-  if (currentCookieToken) {
+  if (!auth.fastAuth && currentCookieToken) {
     const { data: sessionRow } = await admin
       .from("user_sessions")
       .select("is_active")

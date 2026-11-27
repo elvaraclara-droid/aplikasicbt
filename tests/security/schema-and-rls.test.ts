@@ -106,4 +106,17 @@ describe("Supabase Migration Schema & RLS Completeness", () => {
     expect(stmtAlterMatch?.[0]).not.toContain("'supervisor'");
     expect(hardeningSql).toContain("REVOKE ALL ON FUNCTION public.is_super_admin() FROM PUBLIC, anon, authenticated;");
   });
+
+  it("restricts save_student_answers_batch execution to service_role only", () => {
+    const batchSql = fs.readFileSync(
+      path.join(migrationsDir, "0011_batch_save_student_answers.sql"),
+      "utf8"
+    );
+    expect(batchSql).toContain("SECURITY DEFINER");
+    expect(batchSql).toContain("SET search_path = public");
+    expect(batchSql).toContain(
+      "REVOKE ALL ON FUNCTION public.save_student_answers_batch(\n  UUID, UUID, UUID, UUID, UUID, JSONB, UUID\n) FROM PUBLIC, anon, authenticated;"
+    );
+    expect(batchSql).toContain("TO service_role;");
+  });
 });

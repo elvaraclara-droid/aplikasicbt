@@ -37,7 +37,12 @@ import {
   enqueueOfflineAnswer,
   getOfflineAnswersForAttempt,
   removeOfflineAnswer,
+  type OfflineQueuedAnswer,
 } from "@/lib/offline/answer-queue";
+import {
+  computeJitteredDelayMs,
+  getExamSyncProfile,
+} from "@/lib/exam/sync-config";
 import { APP_AUTHOR_CREDIT, cn, formatSecondsClock } from "@/lib/utils";
 import type {
   AntiCheatConfig,
@@ -101,7 +106,16 @@ export default function StudentExamPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedInfo, setSubmittedInfo] = useState<SubmittedExamInfo | null>(null);
 
-  const saveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const syncProfile = useMemo(() => getExamSyncProfile(), []);
+  const saveTimersRef = useRef<
+    Record<
+      string,
+      { timer: ReturnType<typeof setTimeout>; state: StudentSavedAnswerState }
+    >
+  >({});
+  const dirtyQuestionIdsRef = useRef<Set<string>>(new Set());
+  const flushInFlightRef = useRef<Promise<boolean> | null>(null);
+  const preDeadlineFlushedRef = useRef(false);
   const isLocked = ["PAUSED", "LOCKED", "PENDING_SUPERVISOR_APPROVAL"].includes(
     attemptStatus
   );
@@ -178,33 +192,116 @@ export default function StudentExamPage() {
     loadExamData();
   }, [loadExamData]);
 
-  // Flush IndexedDB queue when online
-  const flushOfflineQueue = useCallback(async () => {
-    const items = await getOfflineAnswersForAttempt(attemptId);
-    setPendingOfflineCount(items.length);
-    if (items.length === 0) return;
+  const toQueueItem = useCallback(
+    (state: StudentSavedAnswerState): OfflineQueuedAnswer => ({
+      queueKey: `${attemptId}:${state.question_id}`,
+      attemptId,
+      questionId: state.question_id,
+      selectedOptionId: state.selected_option_id,
+      selectedOptionIds: state.selected_option_ids,
+      statementAnswers: state.statement_answers,
+      essayAnswer: state.essay_answer,
+      isFlagged: state.is_flagged,
+      isAnswered: state.is_answered,
+      answerVersion: state.answer_version,
+      idempotencyKey: `${attemptId}:${state.question_id}:v${state.answer_version}:${crypto.randomUUID()}`,
+      clientUpdatedAt: new Date().toISOString(),
+    }),
+    [attemptId]
+  );
 
-    setSaveStatus("SYNCING");
-    try {
-      const res = await fetch(`/api/attempts/${attemptId}/answers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
-      });
-      if (res.ok) {
-        for (const item of items) {
-          await removeOfflineAnswer(item.queueKey);
-        }
-        setPendingOfflineCount(0);
-        setSaveStatus("SAVED");
-        toast.success(`${items.length} jawaban lokal berhasil disinkronkan.`);
-      } else {
-        setSaveStatus("FAILED");
-      }
-    } catch {
-      setSaveStatus("OFFLINE");
+  const drainPendingLocalWrites = useCallback(async () => {
+    const entries = Object.entries(saveTimersRef.current);
+    if (entries.length === 0) return;
+
+    saveTimersRef.current = {};
+    for (const [, pending] of entries) {
+      clearTimeout(pending.timer);
+      await enqueueOfflineAnswer(toQueueItem(pending.state));
     }
-  }, [attemptId]);
+  }, [toQueueItem]);
+
+  // Flush IndexedDB queue in a single batch transaction
+  const flushOfflineQueue = useCallback(
+    async (options?: { keepalive?: boolean; silent?: boolean }): Promise<boolean> => {
+      if (flushInFlightRef.current) {
+        await flushInFlightRef.current;
+      }
+
+      const runner = (async (): Promise<boolean> => {
+        await drainPendingLocalWrites();
+        const items = await getOfflineAnswersForAttempt(attemptId);
+        setPendingOfflineCount(items.length);
+        if (items.length === 0) {
+          dirtyQuestionIdsRef.current.clear();
+          setSaveStatus("SAVED");
+          return true;
+        }
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          setSaveStatus("OFFLINE");
+          return false;
+        }
+
+        setSaveStatus("SYNCING");
+        try {
+          const res = await fetch(`/api/attempts/${attemptId}/answers`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items }),
+            keepalive: options?.keepalive,
+          });
+
+          if (res.status === 401) {
+            toast.error("Sesi ujian berakhir atau digantikan perangkat lain.");
+            router.push("/login");
+            return false;
+          }
+
+          if (!res.ok) {
+            setSaveStatus("FAILED");
+            return false;
+          }
+
+          // Only remove items from IndexedDB if student did not create a newer version in-flight
+          const latestMap = new Map(
+            (await getOfflineAnswersForAttempt(attemptId)).map((entry) => [
+              entry.queueKey,
+              entry,
+            ])
+          );
+          for (const flushed of items) {
+            const current = latestMap.get(flushed.queueKey);
+            if (!current || current.answerVersion <= flushed.answerVersion) {
+              await removeOfflineAnswer(flushed.queueKey);
+              dirtyQuestionIdsRef.current.delete(flushed.questionId);
+            }
+          }
+
+          const remaining = await getOfflineAnswersForAttempt(attemptId);
+          setPendingOfflineCount(remaining.length);
+          setSaveStatus(remaining.length === 0 ? "SAVED" : "SAVING");
+          if (!options?.silent && remaining.length === 0) {
+            toast.success(`${items.length} jawaban lokal berhasil disinkronkan.`);
+          }
+          return remaining.length === 0;
+        } catch {
+          setSaveStatus(
+            typeof navigator !== "undefined" && !navigator.onLine ? "OFFLINE" : "FAILED"
+          );
+          return false;
+        }
+      })();
+
+      flushInFlightRef.current = runner;
+      try {
+        return await runner;
+      } finally {
+        flushInFlightRef.current = null;
+      }
+    },
+    [attemptId, drainPendingLocalWrites, router]
+  );
 
   // Network listeners
   useEffect(() => {
@@ -230,7 +327,91 @@ export default function StudentExamPage() {
     };
   }, [flushOfflineQueue, proctoring]);
 
-  // Server-authoritative countdown & periodic heartbeat (every 15s)
+  // Periodic Hybrid Batch flush + pagehide/visibilitychange safeguard
+  useEffect(() => {
+    if (
+      syncProfile.mode !== "hybrid_batch" ||
+      loading ||
+      loadError ||
+      isLocked ||
+      attemptStatus === "SUBMITTED" ||
+      attemptStatus === "TERMINATED"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNextFlush = () => {
+      if (cancelled) return;
+      const delay = computeJitteredDelayMs(
+        syncProfile.batchFlushIntervalMs,
+        syncProfile.batchJitterMaxMs
+      );
+      flushTimer = setTimeout(async () => {
+        if (cancelled) return;
+        if (typeof navigator === "undefined" || navigator.onLine) {
+          await flushOfflineQueue({ silent: true });
+        }
+        scheduleNextFlush();
+      }, delay);
+    };
+
+    scheduleNextFlush();
+
+    const handleLeaveFlush = () => {
+      void flushOfflineQueue({ keepalive: true, silent: true });
+    };
+    const handleVisibilityFlush = () => {
+      if (document.visibilityState === "hidden") {
+        void flushOfflineQueue({ keepalive: true, silent: true });
+      }
+    };
+
+    window.addEventListener("pagehide", handleLeaveFlush);
+    document.addEventListener("visibilitychange", handleVisibilityFlush);
+
+    return () => {
+      cancelled = true;
+      if (flushTimer) clearTimeout(flushTimer);
+      window.removeEventListener("pagehide", handleLeaveFlush);
+      document.removeEventListener("visibilitychange", handleVisibilityFlush);
+    };
+  }, [attemptStatus, flushOfflineQueue, isLocked, loadError, loading, syncProfile]);
+
+  // Pre-deadline proactive flush so late local answers arrive before server auto-submit
+  useEffect(() => {
+    if (
+      syncProfile.preDeadlineFlushSeconds <= 0 ||
+      loading ||
+      loadError ||
+      isLocked ||
+      attemptStatus === "SUBMITTED" ||
+      attemptStatus === "TERMINATED"
+    ) {
+      return;
+    }
+
+    if (
+      remainingSeconds > 0 &&
+      remainingSeconds <= syncProfile.preDeadlineFlushSeconds &&
+      !preDeadlineFlushedRef.current
+    ) {
+      preDeadlineFlushedRef.current = true;
+      void flushOfflineQueue({ silent: true });
+    }
+  }, [
+    attemptStatus,
+    flushOfflineQueue,
+    isLocked,
+    loadError,
+    loading,
+    remainingSeconds,
+    syncProfile.preDeadlineFlushSeconds,
+  ]);
+
+  // Server-authoritative countdown & jittered periodic heartbeat
   useEffect(() => {
     if (loading || loadError || attemptStatus === "SUBMITTED" || attemptStatus === "TERMINATED") {
       return;
@@ -242,10 +423,15 @@ export default function StudentExamPage() {
       }
     }, 1000);
 
-    const heartbeat = setInterval(async () => {
-      if (!navigator.onLine) return;
+    const runHeartbeat = async () => {
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
       try {
         const res = await fetch(`/api/attempts/${attemptId}`, { method: "POST" });
+        if (res.status === 401) {
+          toast.error("Sesi ujian telah berakhir atau digantikan perangkat lain.");
+          router.push("/login");
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           setRemainingSeconds(data.remainingSeconds ?? 0);
@@ -263,41 +449,57 @@ export default function StudentExamPage() {
       } catch {
         // Ignore transient offline heartbeat
       }
-    }, 15_000);
+    };
+
+    let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+    const initialJitter = Math.round(
+      Math.random() * syncProfile.heartbeatJitterMaxMs
+    );
+    const startDelayTimer = setTimeout(() => {
+      heartbeatInterval = setInterval(runHeartbeat, syncProfile.heartbeatIntervalMs);
+    }, initialJitter);
 
     return () => {
       clearInterval(tick);
-      clearInterval(heartbeat);
+      clearTimeout(startDelayTimer);
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
     };
-  }, [attemptId, attemptStatus, isLocked, loadError, loading, router]);
+  }, [
+    attemptId,
+    attemptStatus,
+    isLocked,
+    loadError,
+    loading,
+    router,
+    syncProfile.heartbeatIntervalMs,
+    syncProfile.heartbeatJitterMaxMs,
+  ]);
 
-  // Persist answer with idempotency_key + version + IndexedDB offline safety
-  const persistAnswer = useCallback(
+  // Stage answer locally in IndexedDB and sync immediately (per_click) or in batches (hybrid_batch)
+  const stageOrPersistAnswer = useCallback(
     async (state: StudentSavedAnswerState) => {
-      const idempotencyKey = `${attemptId}:${state.question_id}:v${state.answer_version}:${crypto.randomUUID()}`;
-      const payload = {
-        questionId: state.question_id,
-        selectedOptionId: state.selected_option_id,
-        selectedOptionIds: state.selected_option_ids,
-        statementAnswers: state.statement_answers,
-        essayAnswer: state.essay_answer,
-        isFlagged: state.is_flagged,
-        isAnswered: state.is_answered,
-        answerVersion: state.answer_version,
-        idempotencyKey,
-        clientUpdatedAt: new Date().toISOString(),
-      };
-
-      const queueItem = {
-        ...payload,
-        queueKey: `${attemptId}:${state.question_id}`,
-        attemptId,
-      };
-
-      // Always stage in IndexedDB before network call; only delete after HTTP 200
+      const queueItem = toQueueItem(state);
       await enqueueOfflineAnswer(queueItem);
 
-      if (!navigator.onLine) {
+      if (syncProfile.mode === "hybrid_batch") {
+        dirtyQuestionIdsRef.current.add(state.question_id);
+        const items = await getOfflineAnswersForAttempt(attemptId);
+        setPendingOfflineCount(items.length);
+
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          setSaveStatus("OFFLINE");
+          return;
+        }
+
+        if (dirtyQuestionIdsRef.current.size >= syncProfile.batchMaxDirtyCount) {
+          await flushOfflineQueue({ silent: true });
+        } else {
+          setSaveStatus("SAVING");
+        }
+        return;
+      }
+
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
         setSaveStatus("OFFLINE");
         const items = await getOfflineAnswersForAttempt(attemptId);
         setPendingOfflineCount(items.length);
@@ -309,7 +511,7 @@ export default function StudentExamPage() {
         const res = await fetch(`/api/attempts/${attemptId}/answers`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(queueItem),
         });
         if (res.ok) {
           await removeOfflineAnswer(queueItem.queueKey);
@@ -325,13 +527,13 @@ export default function StudentExamPage() {
         setPendingOfflineCount(items.length);
       }
     },
-    [attemptId]
+    [attemptId, flushOfflineQueue, syncProfile.batchMaxDirtyCount, syncProfile.mode, toQueueItem]
   );
 
   function updateAnswerState(
     questionId: string,
     updater: (prev: StudentSavedAnswerState) => StudentSavedAnswerState,
-    debounceMs = 250
+    debounceMs = syncProfile.answerWriteDebounceMs
   ) {
     if (isLocked || attemptStatus === "SUBMITTED" || attemptStatus === "TERMINATED") return;
 
@@ -354,11 +556,14 @@ export default function StudentExamPage() {
       };
 
       if (saveTimersRef.current[questionId]) {
-        clearTimeout(saveTimersRef.current[questionId]);
+        clearTimeout(saveTimersRef.current[questionId].timer);
       }
-      saveTimersRef.current[questionId] = setTimeout(() => {
-        persistAnswer(nextState);
+      const timer = setTimeout(() => {
+        delete saveTimersRef.current[questionId];
+        void stageOrPersistAnswer(nextState);
       }, debounceMs);
+
+      saveTimersRef.current[questionId] = { timer, state: nextState };
 
       return { ...prevMap, [questionId]: nextState };
     });
@@ -367,7 +572,13 @@ export default function StudentExamPage() {
   async function handleConfirmSubmit() {
     setSubmitting(true);
     try {
-      await flushOfflineQueue();
+      const synced = await flushOfflineQueue({ silent: true });
+      if (!synced) {
+        toast.error(
+          "Sinkronisasi jawaban lokal belum selesai. Periksa koneksi lalu coba Kirim Ujian lagi."
+        );
+        return;
+      }
       const res = await fetch(`/api/attempts/${attemptId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -379,6 +590,8 @@ export default function StudentExamPage() {
         return;
       }
       await clearOfflineAttemptQueue(attemptId);
+      dirtyQuestionIdsRef.current.clear();
+      setPendingOfflineCount(0);
       setAttemptStatus("SUBMITTED");
       setSubmitModalOpen(false);
       setSubmittedInfo({
@@ -508,12 +721,18 @@ export default function StudentExamPage() {
                     : "warning"
               }
             >
-              {saveStatus}
-              {pendingOfflineCount > 0 ? ` (${pendingOfflineCount} lokal)` : ""}
+              {saveStatus === "SAVING" && syncProfile.mode === "hybrid_batch"
+                ? "LOKAL"
+                : saveStatus}
+              {pendingOfflineCount > 0 ? ` (${pendingOfflineCount} antrean)` : ""}
             </Badge>
 
             {pendingOfflineCount > 0 && isOnline && (
-              <Button size="sm" variant="outline" onClick={flushOfflineQueue}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void flushOfflineQueue()}
+              >
                 <RefreshCw className="h-3.5 w-3.5" />
                 Sinkronkan
               </Button>
@@ -834,7 +1053,7 @@ export default function StudentExamPage() {
                             essay_answer: text,
                             is_answered: text.trim().length > 0,
                           }),
-                          600
+                          syncProfile.essayWriteDebounceMs
                         );
                       }}
                     />

@@ -14,7 +14,14 @@ const ROLE_ROUTE_PREFIXES = [
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
-  if (!isSupabasePublicConfigured()) {
+  const pathname = request.nextUrl.pathname;
+  const requiresAuth = ROLE_ROUTE_PREFIXES.some((prefix) =>
+    pathname.startsWith(prefix)
+  );
+
+  // Only refresh Supabase Auth session on protected SSR page routes;
+  // API endpoints perform their own auth checks without double getUser() overhead.
+  if (!requiresAuth || !isSupabasePublicConfigured()) {
     return supabaseResponse;
   }
 
@@ -41,12 +48,7 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const requiresAuth = ROLE_ROUTE_PREFIXES.some((prefix) =>
-    pathname.startsWith(prefix)
-  );
-
-  if (requiresAuth && !user) {
+  if (!user) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("redirect", pathname);
