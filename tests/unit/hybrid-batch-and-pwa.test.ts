@@ -86,7 +86,18 @@ describe("Safe CBT PWA Manifest, Icons & Service Worker", () => {
     expect(data.display).toBe("standalone");
     expect(data.start_url).toBe("/login");
 
-    for (const file of ["icon-192.png", "icon-512.png"]) {
+    const iconSrcs = (data.icons || []).map((i) => i.src);
+    expect(iconSrcs).toContain("/icons/icon-192.png");
+    expect(iconSrcs).toContain("/icons/icon-512.png");
+    expect(iconSrcs).toContain("/icons/icon-512-maskable.png");
+    expect(iconSrcs).not.toContain("/icons/icon.svg");
+
+    for (const file of [
+      "icon-192.png",
+      "icon-512.png",
+      "icon-512-maskable.png",
+      "logo.png",
+    ]) {
       const buf = fs.readFileSync(path.join(process.cwd(), "public", "icons", file));
       expect(buf.subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     }

@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ShieldCheck,
   LogOut,
   Menu,
   X,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { APP_AUTHOR_CREDIT, cn, formatDateTimeID } from "@/lib/utils";
+import { AppLogo } from "@/components/branding/app-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
@@ -150,9 +150,7 @@ export function DashboardShell({
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white lg:flex">
         <div className="flex h-16 items-center gap-2.5 border-b border-slate-200 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-900 text-white">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
+          <AppLogo className="h-10 w-auto shrink-0" />
           <div>
             <div className="text-sm font-bold tracking-tight text-slate-900">
               CBT SMART EXAM
@@ -237,7 +235,7 @@ export function DashboardShell({
       <div className="flex flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 lg:hidden">
           <div className="flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-blue-900" />
+            <AppLogo className="h-9 w-auto shrink-0" />
             <span className="text-sm font-bold text-slate-900">CBT SMART EXAM</span>
           </div>
           <Button

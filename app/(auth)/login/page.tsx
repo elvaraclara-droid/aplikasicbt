@@ -2,8 +2,9 @@
 
 import React, { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, KeyRound, UserCheck, Loader2, AlertCircle } from "lucide-react";
+import { KeyRound, UserCheck, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { AppLogo } from "@/components/branding/app-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -86,16 +87,9 @@ function LoginFormContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 py-10">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-900 text-white shadow-sm">
-          <ShieldCheck className="h-6 w-6" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">CBT SMART EXAM</h1>
-          <p className="text-xs font-medium tracking-wider text-slate-500 uppercase">
-            SMART EXAMINATION, SECURE ASSESSMENT.
-          </p>
-        </div>
+      <div className="mb-5 text-center">
+        <AppLogo className="mx-auto h-28 w-auto drop-shadow-sm sm:h-36" />
+        <h1 className="sr-only">CBT SMART EXAM — SMART EXAMINATION, SECURE ASSESSMENT.</h1>
       </div>
 
       <Card className="w-full max-w-md">

@@ -1,4 +1,4 @@
-const CACHE_NAME = "cbt-smart-static-v1";
+const CACHE_NAME = "cbt-smart-static-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

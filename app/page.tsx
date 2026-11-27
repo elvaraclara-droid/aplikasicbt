@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Lock, Eye, Save, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Lock, Eye, Save, ArrowRight, CheckCircle2, AlertTriangle } from "lucide-react";
 import { getAuthenticatedContext, getRoleHomePath } from "@/lib/auth/session";
 import { isSupabaseAdminConfigured, isSupabasePublicConfigured } from "@/lib/env";
+import { AppLogo } from "@/components/branding/app-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { APP_AUTHOR_CREDIT } from "@/lib/utils";
@@ -19,9 +20,7 @@ export default async function HomePage() {
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900 text-white">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 shadow-lg">
-            <ShieldCheck className="h-6 w-6 text-white" />
-          </div>
+          <AppLogo className="h-11 w-auto shrink-0 drop-shadow-md" />
           <div>
             <h1 className="text-lg font-bold tracking-tight">CBT SMART EXAM</h1>
             <p className="text-[11px] tracking-widest text-blue-200 uppercase">
@@ -40,6 +39,7 @@ export default async function HomePage() {
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-14">
         <div className="mx-auto max-w-3xl text-center">
+          <AppLogo className="mx-auto mb-5 h-32 w-auto drop-shadow-[0_12px_28px_rgba(37,99,235,0.45)] sm:h-40" />
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-1.5 text-xs font-medium text-blue-200">
             {supabaseReady ? (
               <>

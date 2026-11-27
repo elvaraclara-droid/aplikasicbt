@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/input";
+import { AppLogo } from "@/components/branding/app-logo";
 import { MathRichContent } from "@/components/exam/math-content";
 import { DynamicWatermark } from "@/components/exam/dynamic-watermark";
 import { useExamProctoring } from "@/hooks/use-exam-proctoring";
@@ -696,12 +697,15 @@ export default function StudentExamPage() {
       {/* Top Exam Bar */}
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white px-4 py-3 shadow-xs">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-sm font-bold text-slate-900 sm:text-base">{exam?.title}</h1>
-            <p className="text-xs text-slate-500">
-              {student?.profiles?.full_name} ({student?.nis}) • {exam?.subjects?.name} •{" "}
-              {session?.name}
-            </p>
+          <div className="flex items-center gap-3">
+            <AppLogo className="h-9 w-auto shrink-0 sm:h-10" />
+            <div>
+              <h1 className="text-sm font-bold text-slate-900 sm:text-base">{exam?.title}</h1>
+              <p className="text-xs text-slate-500">
+                {student?.profiles?.full_name} ({student?.nis}) • {exam?.subjects?.name} •{" "}
+                {session?.name}
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
