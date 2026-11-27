@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireRoleApi } from "@/lib/auth/session";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recordAuditLog } from "@/lib/security/audit";
+import { evaluateExamDeletion } from "@/lib/exams/deletion-guard";
 
 export async function GET(
   _request: NextRequest,
@@ -131,4 +132,133 @@ export async function PATCH(
   });
 
   return NextResponse.json({ exam: updated });
+}
+
+const uuidParamSchema = z.string().uuid();
+
+/**
+ * Deletes an exam (and cascading sessions/tokens/attempts if forced) after checking tenant & teacher permissions.
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const auth = await requireRoleApi(["school_admin", "teacher", "super_admin"]);
+  if (!auth.ok) return auth.response;
+
+  const { id } = await context.params;
+  if (!uuidParamSchema.safeParse(id).success) {
+    return NextResponse.json({ error: "ID ujian tidak valid" }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const force =
+    body?.force === true ||
+    request.nextUrl.searchParams.get("force") === "true";
+
+  const admin = createSupabaseAdminClient();
+  const { data: exam } = await admin
+    .from("exams")
+    .select("id, school_id, subject_id, title, status, created_by")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!exam) {
+    return NextResponse.json({ error: "Ujian tidak ditemukan" }, { status: 404 });
+  }
+
+  if (
+    auth.ctx.profile.role !== "super_admin" &&
+    exam.school_id !== auth.ctx.profile.school_id
+  ) {
+    return NextResponse.json({ error: "Akses ditolak lintas sekolah" }, { status: 403 });
+  }
+
+  if (
+    auth.ctx.profile.role === "teacher" &&
+    exam.created_by !== auth.ctx.userId
+  ) {
+    const { data: teacher } = await admin
+      .from("teachers")
+      .select("id")
+      .eq("profile_id", auth.ctx.userId)
+      .maybeSingle();
+
+    const { data: assignedSubject } = teacher
+      ? await admin
+          .from("teacher_subjects")
+          .select("id")
+          .eq("teacher_id", teacher.id)
+          .eq("subject_id", exam.subject_id)
+          .eq("status", "active")
+          .maybeSingle()
+      : { data: null };
+
+    if (!assignedSubject) {
+      return NextResponse.json(
+        { error: "Anda tidak memiliki kewenangan menghapus ujian pada mata pelajaran ini." },
+        { status: 403 }
+      );
+    }
+  }
+
+  const { count: attemptsCount, error: countErr } = await admin
+    .from("exam_attempts")
+    .select("id", { head: true, count: "exact" })
+    .eq("exam_id", id)
+    .eq("school_id", exam.school_id);
+
+  if (countErr) {
+    return NextResponse.json(
+      { error: "Gagal memeriksa riwayat pengerjaan ujian." },
+      { status: 500 }
+    );
+  }
+
+  const guard = evaluateExamDeletion({
+    status: exam.status,
+    attemptsCount: attemptsCount ?? 0,
+    force,
+  });
+
+  if (!guard.allowed) {
+    return NextResponse.json(
+      {
+        error: guard.error,
+        requiresForce: guard.requiresForce,
+        attemptsCount: guard.attemptsCount,
+      },
+      { status: guard.status }
+    );
+  }
+
+  const { error: deleteErr } = await admin
+    .from("exams")
+    .delete()
+    .eq("id", id)
+    .eq("school_id", exam.school_id);
+
+  if (deleteErr) {
+    return NextResponse.json(
+      { error: deleteErr.message || "Gagal menghapus ujian." },
+      { status: 400 }
+    );
+  }
+
+  await recordAuditLog({
+    schoolId: exam.school_id,
+    actorId: auth.ctx.userId,
+    actorRole: auth.ctx.profile.role,
+    action: "EXAM_DELETED",
+    entityType: "exams",
+    entityId: id,
+    metadata: {
+      title: exam.title,
+      previousStatus: exam.status,
+      attemptsCount: attemptsCount ?? 0,
+      forced: force,
+    },
+  });
+
+  return NextResponse.json({ ok: true, deletedId: id, title: exam.title });
 }

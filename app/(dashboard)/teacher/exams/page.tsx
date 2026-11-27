@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input, Label, SelectNative } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { DeleteExamButton } from "@/components/exams/delete-exam-button";
 import { formatDateTimeID } from "@/lib/utils";
 import type {
   ClassRef,
@@ -164,6 +165,18 @@ export default function TeacherExamsPage() {
     const data = await res.json();
     if (!res.ok) toast.error(data.error || "Gagal menugaskan pengawas");
     else toast.success("Pengawas berhasil ditugaskan ke ujian.");
+  }
+
+  function handleExamDeleted(deletedId: string) {
+    const remaining = exams.filter((item) => item.id !== deletedId);
+    setExams(remaining);
+    if (assignExamId === deletedId) {
+      const nextExam = remaining[0];
+      setAssignExamId(nextExam?.id || "");
+      setAssignSessionsList(nextExam?.exam_sessions || []);
+      setAssignSessionId(nextExam?.exam_sessions?.[0]?.id || "");
+    }
+    loadAll();
   }
 
   if (loading) {
@@ -445,27 +458,45 @@ export default function TeacherExamsPage() {
           <CardTitle>Daftar Ujian ({exams.length})</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {exams.map((ex) => (
-            <div
-              key={ex.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 text-sm"
-            >
-              <div>
-                <p className="font-semibold text-slate-900">{ex.title}</p>
-                <p className="text-xs text-slate-500">
-                  {ex.subjects?.name} • {ex.exam_sessions?.length || 1} sesi •{" "}
-                  {formatDateTimeID(ex.starts_at)}
-                </p>
+          {exams.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              Belum ada ujian yang dibuat.
+            </p>
+          ) : (
+            exams.map((ex) => (
+              <div
+                key={ex.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4 text-sm"
+              >
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-slate-900">{ex.title}</p>
+                    <Badge variant={ex.status === "active" ? "success" : "primary"}>
+                      {ex.status}
+                    </Badge>
+                    {ex.is_makeup && <Badge variant="warning">Susulan</Badge>}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {ex.subjects?.name} • {ex.exam_sessions?.length || 1} sesi •{" "}
+                    {formatDateTimeID(ex.starts_at)}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Link href={`/teacher/results/${ex.id}`}>
+                    <Button size="sm" variant="outline">
+                      <BarChart3 className="h-3.5 w-3.5" /> Hasil & Penilaian
+                    </Button>
+                  </Link>
+                  <DeleteExamButton
+                    examId={ex.id}
+                    examTitle={ex.title}
+                    examStatus={ex.status}
+                    onDeleted={handleExamDeleted}
+                  />
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Link href={`/teacher/results/${ex.id}`}>
-                  <Button size="sm" variant="outline">
-                    <BarChart3 className="h-3.5 w-3.5" /> Hasil & Penilaian
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </CardContent>
       </Card>
     </div>

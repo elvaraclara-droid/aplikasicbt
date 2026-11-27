@@ -6,6 +6,6 @@
    - Tambah akun Siswa, Guru, dan Pengawas satu per satu atau melalui **Import Siswa (.csv / .xlsx)** (kolom minimal: `username, full_name, nis, nisn, class_code, gender`).
    - Gunakan **Reset Password** apabila siswa lupa kata sandi; berikan password sementara yang tampil satu kali kepada siswa.
 4. **Manajemen Ujian & Token (`/admin/exams`):**
-   - Pilih ujian, aktifkan/jeda/tutup/batalkan ujian sesuai jadwal.
+   - Pilih ujian, aktifkan/jeda/tutup/batalkan, atau hapus ujian sesuai jadwal (ujian berstatus `active` wajib dijeda/ditutup/dibatalkan dulu sebelum dihapus).
    - Pilih sesi dan klik **GENERATE TOKEN OTOMATIS** (atau input token manual). Salin/cetak token segera karena plaintext tidak pernah disimpan atau ditampilkan kembali.
    - Pantau audit log operasional sekolah secara berkala.

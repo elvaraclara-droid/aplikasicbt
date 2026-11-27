@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input, Label, SelectNative } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { DeleteExamButton } from "@/components/exams/delete-exam-button";
 import { formatDateTimeID } from "@/lib/utils";
 import type {
   AuditLogView,
@@ -216,6 +217,22 @@ export default function AdminExamsAndTokensPage() {
               <Button size="sm" variant="destructive" onClick={() => handleUpdateExamStatus("cancelled")}>
                 Batalkan
               </Button>
+              {(() => {
+                const selectedExam = exams.find((x) => x.id === selectedExamId);
+                return selectedExam ? (
+                  <DeleteExamButton
+                    examId={selectedExam.id}
+                    examTitle={selectedExam.title}
+                    examStatus={selectedExam.status}
+                    label="Hapus Ujian"
+                    onDeleted={() => {
+                      setSelectedExamId("");
+                      setExamDetail(null);
+                      loadExamsAndLogs();
+                    }}
+                  />
+                ) : null;
+              })()}
               <Link href={`/supervisor/monitoring/${selectedExamId}`}>
                 <Button size="sm">
                   <Eye className="h-3.5 w-3.5" /> Monitor

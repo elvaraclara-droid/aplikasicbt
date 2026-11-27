@@ -6,6 +6,7 @@ import { BookOpen, ClipboardCheck, BarChart3, Loader2, ArrowRight } from "lucide
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DeleteExamButton } from "@/components/exams/delete-exam-button";
 import { formatDateTimeID } from "@/lib/utils";
 import type { ExamSummary, QuestionBankView, QuestionView } from "@/types/views";
 
@@ -124,11 +125,21 @@ export default function TeacherDashboardPage() {
                       {formatDateTimeID(ex.starts_at)}
                     </p>
                   </div>
-                  <Link href={`/teacher/results/${ex.id}`}>
-                    <Button size="sm" variant="outline">
-                      <BarChart3 className="h-3.5 w-3.5" /> Hasil & Analisis
-                    </Button>
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/teacher/results/${ex.id}`}>
+                      <Button size="sm" variant="outline">
+                        <BarChart3 className="h-3.5 w-3.5" /> Hasil & Analisis
+                      </Button>
+                    </Link>
+                    <DeleteExamButton
+                      examId={ex.id}
+                      examTitle={ex.title}
+                      examStatus={ex.status}
+                      onDeleted={(deletedId) =>
+                        setExams((prev) => prev.filter((item) => item.id !== deletedId))
+                      }
+                    />
+                  </div>
                 </div>
               ))}
             </div>

@@ -8,7 +8,7 @@
    - Gunakan fitur **Download Template .docx** dan **Import .docx** (format tabel terstruktur Word mendukung PG, MCMA, Benar/Salah, Uraian, rumus KaTeX `$...$`, dan gambar), serta Duplikat, Import JSON, dan Export JSON.
 3. **Pembuatan & Pengaturan Ujian (`/teacher/exams`):**
    - Tentukan judul, jadwal, durasi, jumlah sesi (single atau multi-sesi), pilih soal, dan tandai sebagai ujian susulan jika diperlukan.
-   - Daftarkan kelas ke sesi ujian dan tugaskan Pengawas.
+   - Daftarkan kelas ke sesi ujian, tugaskan Pengawas, atau hapus ujian dari **Daftar Ujian** (ujian berstatus `active` harus dijeda/ditutup terlebih dahulu, dan ujian yang sudah memiliki riwayat peserta memerlukan konfirmasi hapus permanen).
 4. **Penilaian & Analisis Hasil (`/teacher/results/[examId]`):**
    - Periksa hasil penilaian otomatis dan beri skor manual untuk soal uraian.
    - Tinjau **Analisis Butir Soal**, publikasikan nilai ke siswa, atau unduh laporan CSV, Excel, dan PDF.
