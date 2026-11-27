@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 
 export default function StudentChangePasswordPage() {
   const router = useRouter();
@@ -54,18 +55,20 @@ export default function StudentChangePasswordPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label>Password Saat Ini / Sementara</Label>
-              <Input
-                type="password"
+              <Label htmlFor="stuCurrPwd">Password Saat Ini / Sementara</Label>
+              <PasswordInput
+                id="stuCurrPwd"
+                autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Password Baru (min. 8 karakter, huruf & angka)</Label>
-              <Input
-                type="password"
+              <Label htmlFor="stuNewPwd">Password Baru (min. 8 karakter, huruf & angka)</Label>
+              <PasswordInput
+                id="stuNewPwd"
+                autoComplete="new-password"
                 required
                 minLength={8}
                 value={newPassword}

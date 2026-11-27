@@ -8,6 +8,7 @@ import { AppLogo } from "@/components/branding/app-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { APP_AUTHOR_CREDIT, cn } from "@/lib/utils";
 
 function LoginFormContent() {
@@ -162,9 +163,9 @@ function LoginFormContent() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="stu-pass">Password</Label>
-                <Input
+                <PasswordInput
+                  key="stu-pass"
                   id="stu-pass"
-                  type="password"
                   placeholder="Masukkan password Anda"
                   autoComplete="current-password"
                   required
@@ -214,9 +215,9 @@ function LoginFormContent() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="staff-pass">Password</Label>
-                <Input
+                <PasswordInput
+                  key="staff-pass"
                   id="staff-pass"
-                  type="password"
                   placeholder="Masukkan password"
                   autoComplete="current-password"
                   required

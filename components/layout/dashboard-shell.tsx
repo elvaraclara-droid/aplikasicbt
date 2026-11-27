@@ -16,7 +16,8 @@ import { APP_AUTHOR_CREDIT, cn, formatDateTimeID } from "@/lib/utils";
 import { AppLogo } from "@/components/branding/app-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import {
   Dialog,
   DialogContent,
@@ -299,9 +300,9 @@ export function DashboardShell({
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="currPwd">Password Saat Ini</Label>
-              <Input
+              <PasswordInput
                 id="currPwd"
-                type="password"
+                autoComplete="current-password"
                 required
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
@@ -309,9 +310,9 @@ export function DashboardShell({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="newPwd">Password Baru (min. 8 karakter, huruf & angka)</Label>
-              <Input
+              <PasswordInput
                 id="newPwd"
-                type="password"
+                autoComplete="new-password"
                 required
                 minLength={8}
                 value={newPassword}
