@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input, Label, SelectNative } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { DeleteSchoolButton } from "@/components/schools/delete-school-button";
 import { formatDateTimeID } from "@/lib/utils";
 import type {
   AuditLogView,
@@ -91,6 +92,14 @@ export default function SuperAdminDashboardPage() {
     setSchoolName("");
     setCity("");
     loadAll();
+  }
+
+  function handleSchoolDeleted(deletedId: string) {
+    setSchools((prev) => prev.filter((item) => item.id !== deletedId));
+    if (adminSchoolId === deletedId) {
+      setAdminSchoolId("");
+    }
+    void loadAll();
   }
 
   async function handleCreateSchoolAdmin(e: React.FormEvent) {
@@ -257,24 +266,38 @@ export default function SuperAdminDashboardPage() {
             </form>
 
             <div className="max-h-56 space-y-2 overflow-y-auto border-t border-slate-100 pt-3">
-              {schools.map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5 text-xs"
-                >
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      {s.name} ({s.code})
-                    </p>
-                    <p className="text-slate-500">
-                      {s.education_level} • {s.city || "-"}
-                    </p>
+              {schools.length === 0 ? (
+                <p className="py-4 text-center text-xs text-slate-500">
+                  Belum ada sekolah terdaftar.
+                </p>
+              ) : (
+                schools.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-2.5 text-xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-900">
+                        {s.name} ({s.code})
+                      </p>
+                      <p className="text-slate-500">
+                        {s.education_level} • {s.city || "-"}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge variant={s.status === "active" ? "success" : "danger"}>
+                        {s.status}
+                      </Badge>
+                      <DeleteSchoolButton
+                        schoolId={s.id}
+                        schoolCode={s.code}
+                        schoolName={s.name}
+                        onDeleted={handleSchoolDeleted}
+                      />
+                    </div>
                   </div>
-                  <Badge variant={s.status === "active" ? "success" : "danger"}>
-                    {s.status}
-                  </Badge>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
